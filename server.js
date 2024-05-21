@@ -183,20 +183,16 @@ async function main() {
 
             // If IPFS contains data
             if (reviews.length > 0) {
-                // Unpin previous data
-                let res = await pinata.unpin(ipfsHash);
-                console.log("Unpinning previous data:", res);
-
                 // Check if the wallet already contains a review for this item
                 const existingReview = reviews.find(review => review.walletAddr === newReview.walletAddr);
                 if (existingReview) {
                     console.log("User has already submitted a review for this item.");
-
-                    // Remove existing review
-                    reviews = reviews.filter(review => review.walletAddr !== newReview.walletAddr);
-
-                    console.log("Removed existing review:\n", existingReview);
+                    return false;
                 }
+
+                // Unpin previous data
+                let res = await pinata.unpin(ipfsHash);
+                console.log("Unpinning previous data:", res);
             }
         }
 
@@ -353,6 +349,11 @@ async function main() {
 
             // Update the IPFS file with the new review
             const newIPFSHash = await updateIPFSReviews(currentIPFSHash, newReview, itemName);
+
+            if (newIPFSHash === false) {
+                console.error("User has already submitted a review for this item.")
+                return res.status(400).json({success: false, message: 'User has already submitted a review for this item'});
+            }
 
             console.log("Updating IPFS domain mapping.")
             await updateIPFSDomain(newReview.domain, [itemName]);
