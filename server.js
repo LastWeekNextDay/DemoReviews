@@ -3,7 +3,7 @@ async function main() {
     const axios = require('axios');
     const express = require('express');
     const bodyParser = require('body-parser');
-    const { Web3 } = require('web3');
+    const {Web3} = require('web3');
     const pinataSDK = require('@pinata/sdk');
     const cors = require('cors');
 
@@ -29,7 +29,7 @@ async function main() {
     console.log('Contract initialized.');
 
     // Initialize Pinata
-    const pinata = new pinataSDK({ pinataJWTKey: process.env.PINATA_JWT, pinataSecretApiKey: process.env.PINATA_SECRET });
+    const pinata = new pinataSDK({pinataJWTKey: process.env.PINATA_JWT, pinataSecretApiKey: process.env.PINATA_SECRET});
     res = await pinata.testAuthentication();
     console.log('Pinata initialization: ', res);
 
@@ -85,7 +85,7 @@ async function main() {
     }
 
     // Function to lookup IPFS data
-    async function lookupIPFSData(name){
+    async function lookupIPFSData(name) {
         const filter = {
             status: "pinned",
             name: name
@@ -139,7 +139,7 @@ async function main() {
     }
 
     // Function to update IPFS domain to reviews mapping
-    async function updateIPFSDomain(domain, listOfItems){
+    async function updateIPFSDomain(domain, listOfItems) {
         let {found, hash} = await lookupIPFSData("DomainMapping");
 
         const options = {
@@ -148,8 +148,7 @@ async function main() {
             }
         }
 
-        let domMapping = {
-        }
+        let domMapping = {}
 
         if (!found) {
             domMapping[domain] = listOfItems;
@@ -226,25 +225,25 @@ async function main() {
 
     app.get('/ping', (req, res) => {
         console.log('Ping from', req.ip);
-        res.json({ success: true, message: 'Pong' });
+        res.json({success: true, message: 'Pong'});
     });
 
     app.get('/getItemReviews', async (req, res) => {
         console.log(req.query)
 
-        const { itemName, domainName } = req.query;
+        const {itemName, domainName} = req.query;
 
         if (!itemName && !domainName) {
-            return res.status(400).json({ success: false, message: 'Missing required query parameter' });
+            return res.status(400).json({success: false, message: 'Missing required query parameter'});
         }
 
-        if (domainName){
+        if (domainName) {
             console.log("Looking up domain mapping for ", domainName)
-            let { found, hash} = await lookupIPFSData("DomainMapping");
+            let {found, hash} = await lookupIPFSData("DomainMapping");
 
             if (!found) {
                 console.log("Domain mapping not found.");
-                return res.status(404).json({ success: false, message: 'Domain not found' });
+                return res.status(404).json({success: false, message: 'Domain not found'});
             } else {
                 console.log("Retrieving domain mapping data.")
                 let axiosRes = await axios.get(process.env.PINATA_GATEWAY + "/ipfs/" + hash);
@@ -257,8 +256,8 @@ async function main() {
                     let items = domMapping[domainName];
                     let reviews = [];
                     for (let item of items) {
-                        if (itemName){
-                            if (item !== itemName){
+                        if (itemName) {
+                            if (item !== itemName) {
                                 continue;
                             }
                         }
@@ -271,7 +270,7 @@ async function main() {
                     res.json(reviews);
                 } else {
                     console.log("Domain not found.");
-                    return res.status(404).json({ success: false, message: 'Domain not found' });
+                    return res.status(404).json({success: false, message: 'Domain not found'});
                 }
             }
         } else {
@@ -296,7 +295,7 @@ async function main() {
     app.post('/uploadReview', async (req, res) => {
         console.log(req.body)
 
-        const { itemName, review, tx } = req.body;
+        const {itemName, review, tx} = req.body;
 
         console.log("Received review.")
         console.log("Item name:", itemName)
@@ -305,29 +304,40 @@ async function main() {
 
         if (!itemName || !tx || !review) {
             console.error("Missing required parameters.")
-            return res.status(400).json({ success: false, message: 'Missing required parameters' });
+            return res.status(400).json({success: false, message: 'Missing required parameters'});
         }
 
         try {
             if (!tx.status) {
                 console.error("Invalid transaction receipt.")
-                return res.status(400).json({ success: false, message: 'Invalid transaction receipt' });
+                return res.status(400).json({success: false, message: 'Invalid transaction receipt'});
             } else {
                 if (tx.from.toLowerCase() !== review.walletAddress.toLowerCase()) {
                     console.error("Transaction not done by reviewer.")
-                    return res.status(400).json({ success: false, message: 'Transaction not done by reviewer' });
+                    return res.status(400).json({success: false, message: 'Transaction not done by reviewer'});
                 }
             }
 
             console.log("Trying to get hash.")
 
             // Get the existing IPFS hash from the contract
-            let currentIPFSHash = await contract.methods.getItemIPFSHash(itemName).call({from: process.env.CONTRACT_OWNER});
+            let currentIPFSHash = await contract.methods.getItemIPFSHash(itemName).call();
+
+            console.log("Current IPFS hash:", currentIPFSHash)
+
+            console.log("Getting domain name.")
 
             // Fix domain name
             let domain = req.get('origin');
-            if (domain.includes("://")) {
-                domain = domain.split('://')[1];
+            if (domain) {
+                if (domain.includes("://")) {
+                    domain = domain.split('://')[1];
+                }
+            } else {
+                domain = req.get('hostname')
+                if (!domain) {
+                    domain = "Unknown";
+                }
             }
 
             // Create a new review object
