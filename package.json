@@ -2,7 +2,6 @@
   "name": "demoreviews",
   "version": "1.0.0",
   "description": "",
-  "main": "truffle-config.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
