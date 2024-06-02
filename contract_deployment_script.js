@@ -14,6 +14,10 @@ async function main(contractName) {
     // (the results of a previous compilation step)
     const { abi, bytecode } = JSON.parse(fs.readFileSync("contracts/" + contractName + ".json", 'utf-8'));
 
+    if (!process.env.ETHEREUM_NETWORK) {
+        throw new Error('ETHEREUM_NETWORK environment variable not set.');
+    }
+
     // Configuring the connection to an Ethereum node
     const network = process.env.ETHEREUM_NETWORK.toLowerCase();
     const web3 = new Web3(
