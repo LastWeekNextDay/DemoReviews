@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Admin Webpage</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.3.0/dist/web3.min.js"></script>
+</head>
+<style>
+    .button-custom {
+        margin-bottom: 20px;
+    }
+
+    .button-refresh {
+        background-color: #4285F4;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: background-color 0.3s;
+    }
+
+    .button-remove {
+        display: block;
+        background-color: #4285F4;
+        margin-top: 1cm;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: background-color 0.3s;
+    }
+</style>
+<body>
+<div class="content" id="page-content" style="display: none;">
+    <div class="container mt-5">
+        <ul class="nav nav-tabs" id="tab" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="editors-tab" data-toggle="tab" href="#editors" role="tab">Editors</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="item-tab" data-toggle="tab" href="#item" role="tab">Item Info</a>
+            </li>
+        </ul>
+        <div class="tab-content" id="tabContent">
+            <div class="tab-pane fade show active" id="editors" role="tabpanel">
+                <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="add-tab" data-toggle="pill" href="#add" role="tab">Add</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="remove-tab" data-toggle="pill" href="#remove" role="tab">Remove</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="show-tab" data-toggle="pill" href="#show" role="tab">Show</a>
+                    </li>
+                </ul>
+                <div class="tab-content" id="pills-tabContent">
+                    <div class="tab-pane fade show active" id="add" role="tabpanel">
+                        <!-- Add authorized editors -->
+                        <form id="addEditorForm">
+                            <div class="form-group">
+                                <label for="walletAddressArea">Wallet Address:</label>
+                                <textarea class="form-control" id="walletAddressArea" rows="3"></textarea>
+                            </div>
+                            <script>
+                                document.getElementById('addEditorForm').addEventListener('submit', async function (event) {
+                                    event.preventDefault();
+
+                                    const walletAddress = document.getElementById('walletAddressArea').value;
+
+                                    if (typeof window.ethereum !== 'undefined' || (typeof window.web3 !== 'undefined')) {
+                                        const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                                        const account = accounts[0];
+
+                                        fetch('http://localhost:443/authorizedEditors/add?initiator=' + encodeURIComponent(account)
+                                            + '&address=' + encodeURIComponent(walletAddress), {
+                                            method: 'POST',
+                                        })
+                                            .then(response => response.json())
+                                            .then(async data => {
+                                                if (data.success) {
+                                                    try {
+                                                        window.ethereum.request({
+                                                            method: 'eth_sendTransaction',
+                                                            params: [data.message],
+                                                        })
+                                                            .then((txHash) => {
+                                                                console.log('Transaction sent successfully. Check your transaction on Etherscan.io', txHash);
+                                                            })
+                                                            .catch((error) => {
+                                                                console.error('Something went wrong: ', error);
+                                                            });
+                                                    } catch (error) {
+                                                        console.error(error);
+                                                    }
+                                                } else {
+                                                    alert('Failed to create transaction: ' + data.message);
+                                                }
+                                            })
+                                            .catch((error) => {
+                                                console.error('Error:', error);
+                                                alert('Failed to create transaction');
+                                            });
+                                    } else {
+                                        console.log('MetaMask is not installed. Please consider installing it: https://metamask.io/download.html');
+                                    }
+                                });
+                            </script>
+                            <button type="submit" class="btn btn-primary">Add Editor</button>
+                        </form>
+                    </div>
+                    <div class="tab-pane fade" id="remove" role="tabpanel">
+                        <!-- Remove authorized editors -->
+                        <button class="btn btn-primary button-refresh" id="refreshList">Refresh</button>
+                        <label for="dropdown-editors"></label><select id="dropdown-editors">
+                        <option value="" disabled selected>Select an editor</option>
+                    </select>
+                        <button class="btn btn-primary button-remove" id="removeButton" disabled>Remove</button>
+                        <script>
+                            document.getElementById('refreshList').addEventListener('click', function () {
+                                fetch('http://localhost:443/authorizedEditors')
+                                    .then(async data => {
+                                        const json = await data.json();
+                                        let dropdown = document.getElementById('dropdown-editors');
+                                        dropdown.innerHTML = '';
+                                        json.message.forEach(editor => {
+                                            let option = document.createElement('option');
+                                            option.text = editor;
+                                            option.value = editor;
+                                            dropdown.add(option);
+                                        });
+                                    })
+                                    .catch(error => console.error('Error:', error));
+                            });
+                            document.getElementById('dropdown-editors').addEventListener('change', function () {
+                                document.getElementById('removeButton').disabled = !document.getElementById('dropdown-editors').value;
+                            });
+                            document.getElementById('dropdown-editors').addEventListener('click', function () {
+                                document.getElementById('removeButton').disabled = !document.getElementById('dropdown-editors').value;
+                            });
+                            document.getElementById('removeButton').addEventListener('click', async function () {
+                                let selectedEditor = document.getElementById('dropdown-editors').value;
+                                if (selectedEditor) {
+                                    const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                                    const account = accounts[0];
+                                    fetch('http://localhost:443/authorizedEditors/' + encodeURIComponent(selectedEditor) + '/remove?initiator=' + encodeURIComponent(account), {
+                                        method: 'DELETE',
+                                    })
+                                        .then(response => response.json())
+                                        .then(data => {
+                                            if (data.success) {
+                                                alert('Editor removed successfully.');
+                                                document.getElementById('dropdown-editors').selectedIndex = 0;
+                                            } else {
+                                                alert('Failed to remove editor: ' + data.message);
+                                            }
+                                        })
+                                        .catch(error => console.error('Error:', error));
+                                } else {
+                                    alert('Please select an editor to remove.');
+                                }
+                            });
+                        </script>
+                    </div>
+                    <div class="tab-pane fade" id="show" role="tabpanel">
+                        <!-- Show authorized editors -->
+                        <form id="checkEditorForm">
+                            <div class="form-group">
+                                <label for="checkEditorAddressArea">Check Editor Address:</label>
+                                <textarea class="form-control" id="checkEditorAddressArea" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn button-custom btn-primary">Check Editor</button>
+                        </form>
+                        <button id="showEditorsButton" class="btn button-custom btn-primary">Show Editors</button>
+                        <ul id="editorList"></ul>
+                        <script>
+                            document.getElementById('checkEditorForm').addEventListener('submit', async function (event) {
+                                event.preventDefault();
+
+                                const checkEditorAddress = document.getElementById('checkEditorAddressArea').value;
+
+                                fetch('http://localhost:443/authorizedEditors/' + encodeURIComponent(checkEditorAddress), {
+                                    method: 'GET',
+                                })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (data.success) {
+                                            if (data.message) {
+                                                alert('Address is an editor');
+                                            } else {
+                                                alert('Address is not an editor');
+                                            }
+                                        } else {
+                                            console.error('Failed to check if address is an editor:', data.message);
+                                        }
+                                    })
+                                    .catch((error) => {
+                                        console.error('Error:', error);
+                                        alert('Failed to check if address is an editor');
+                                    });
+                            });
+                        </script>
+                        <script>
+                            document.getElementById('showEditorsButton').addEventListener('click', async function () {
+                                const response = await fetch('http://localhost:443/authorizedEditors/');
+                                const data = await response.json();
+                                if (data.success) {
+                                    const editors = data.message;
+                                    const editorList = document.getElementById('editorList');
+                                    editorList.innerHTML = '';
+                                    for (const editor of editors) {
+                                        const listItem = document.createElement('li');
+                                        listItem.textContent = editor;
+                                        editorList.appendChild(listItem);
+                                    }
+                                } else {
+                                    console.error('Failed to fetch authorized editors:', data.message);
+                                }
+                            });
+                        </script>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="item" role="tabpanel">
+                <!-- Get and Update Info of item -->
+                <ul class="nav nav-pills mb-3" id="pills-item-tab" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="update-tab" data-toggle="pill" href="#update"
+                           role="tab">Update</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="get-tab" data-toggle="pill" href="#get" role="tab">Get</a>
+                    </li>
+                </ul>
+                <div class="tab-content" id="pills-item-tabContent">
+                    <div class="tab-pane fade show active" id="update" role="tabpanel">
+                        <!-- Update item info -->
+                        <form id="updateItemForm">
+                            <div class="form-group">
+                                <label for="itemNameUpdate">Item Name:</label>
+                                <input type="text" class="form-control" id="itemNameUpdate">
+                            </div>
+                            <div class="form-group">
+                                <label for="alternateNameUpdate">New Alternate Name:</label>
+                                <input type="text" class="form-control" id="alternateNameUpdate">
+                            </div>
+                            <div class="form-group">
+                                <label for="descriptionUpdate">New Description:</label>
+                                <textarea class="form-control" id="descriptionUpdate" rows="3"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="imageUpload">Upload Images:</label>
+                                <input type="file" class="form-control-file" id="imageUpload" multiple>
+                            </div>
+                            <div class="image-list" id="imageList"></div>
+                            <script>
+                                document.getElementById('imageUpload').addEventListener('change', function (event) {
+                                    const files = event.target.files;
+                                    const imageList = document.getElementById('imageList');
+                                    imageList.innerHTML = '';
+                                    for (const file of files) {
+                                        const reader = new FileReader();
+                                        if (file.type.indexOf('image') === -1) {
+                                            alert('Invalid file type. Please upload an image file.');
+                                            return;
+                                        }
+                                        reader.onload = function (e) {
+                                            const img = document.createElement('img');
+                                            img.src = e.target.result;
+                                            imageList.appendChild(img);
+                                        };
+                                        reader.readAsDataURL(file);
+                                    }
+                                });
+
+                                document.getElementById('updateItemForm').addEventListener('submit', async function (event) {
+                                    event.preventDefault();
+
+                                    const itemName = document.getElementById('itemNameUpdate').value;
+                                    const alternateName = document.getElementById('alternateNameUpdate').value;
+                                    const description = document.getElementById('descriptionUpdate').value;
+                                    const imageUpload = document.getElementById('imageUpload').files;
+                                    const images = [];
+
+                                    for (const file of imageUpload) {
+                                        const reader = new FileReader();
+                                        if (file.type.indexOf('image') === -1) {
+                                            continue;
+                                        }
+                                        reader.onload = function (e) {
+                                            images.push(e.target.result);
+                                        };
+                                        reader.readAsDataURL(file);
+                                    }
+
+                                    if (typeof window.ethereum !== 'undefined' || (typeof window.web3 !== 'undefined')) {
+                                        const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                                        const account = accounts[0];
+
+                                        const data = {
+                                            itemName,
+                                            alternateName,
+                                            description,
+                                            images
+                                        };
+
+                                        fetch('http://localhost:443/items/' + encodeURIComponent(itemName)
+                                            + '/info/update?initiator='+ encodeURIComponent(account), {
+                                            method: 'PUT',
+                                            headers: {
+                                                'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify(data)
+                                        })
+                                            .then(response => response.json())
+                                            .then(async data => {
+                                                if (data.success) {
+                                                    try {
+                                                        window.ethereum.request({
+                                                            method: 'eth_sendTransaction',
+                                                            params: [data.message],
+                                                        })
+                                                            .then((txHash) => {
+                                                                console.log('Transaction sent successfully. Check your transaction on Etherscan.io', txHash);
+                                                            })
+                                                            .catch((error) => {
+                                                                console.error('Something went wrong: ', error);
+                                                            });
+                                                    } catch (error) {
+                                                        console.error(error);
+                                                    }
+                                                } else {
+                                                    alert('Failed to create transaction: ' + data.message);
+                                                }
+                                            })
+                                            .catch((error) => {
+                                                console.error('Error:', error);
+                                                alert('Failed to create transaction');
+                                            });
+                                    } else {
+                                        console.log('MetaMask is not installed. Please consider installing it: https://metamask.io/download.html');
+                                    }
+                                });
+                            </script>
+                            <button type="submit" class="btn btn-primary button-update">Update Item</button>
+                        </form>
+                    </div>
+                    <div class="tab-pane fade" id="get" role="tabpanel">
+                        <!-- Get item info -->
+                        <form id="getItemForm">
+                            <div class="form-group">
+                                <label for="itemNameGet">Item Name:</label>
+                                <input type="text" class="form-control" id="itemNameGet">
+                            </div>
+                            <button type="submit" class="btn button-custom btn-primary button-get">Get Item Info
+                            </button>
+                        </form>
+                        <div id="itemInfo"></div>
+                        <script>
+                            document.getElementById('getItemForm').addEventListener('submit', async function (event) {
+                                event.preventDefault();
+
+                                const itemName = document.getElementById('itemNameGet').value;
+
+                                fetch('http://localhost:443/items/' + encodeURIComponent(itemName) + '/info', {
+                                    method: 'GET',
+                                })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (data.success) {
+                                            const info = data.message;
+                                            const itemInfo = document.getElementById('itemInfo');
+                                            itemInfo.innerHTML = '';
+                                            itemInfo.innerHTML += `<p>Alternate Name: ${info['Alternate Name']}</p>`;
+                                            itemInfo.innerHTML += `<p>Description: ${info['Description']}</p>`;
+                                            const imageContainer = document.createElement('div');
+                                            info['Images'].forEach(imgSrc => {
+                                                const img = document.createElement('img');
+                                                img.src = imgSrc;
+                                                imageContainer.appendChild(img);
+                                            });
+                                            itemInfo.appendChild(imageContainer);
+                                        } else {
+                                            console.error('Failed to retrieve item info:', data.message);
+                                            alert('Failed to retrieve item info: ' + data.message);
+                                        }
+                                    })
+                                    .catch((error) => {
+                                        console.error('Error:', error);
+                                        alert('Failed to retrieve item info');
+                                    });
+                            });
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    window.addEventListener('load', async () => {
+        if (typeof window.ethereum !== 'undefined') {
+            try {
+                console.log('Requesting accounts...');
+                await window.ethereum.request({method: 'eth_requestAccounts'});
+                console.log('Accounts successfully retrieved');
+                document.getElementById('page-content').style.display = 'block';
+            } catch (error) {
+                console.error('Error while requesting accounts:', error);
+                alert('Please allow access to your MetaMask account.');
+            }
+
+            window.ethereum.on('accountsChanged', async function (accounts) {
+                console.log('Accounts changed:', accounts);
+                if (accounts.length > 0) {
+                    document.getElementById('page-content').style.display = 'block';
+                } else {
+                    document.getElementById('page-content').style.display = 'none';
+                    alert('Please allow access to your MetaMask account.');
+                }
+            });
+        } else {
+            console.log('MetaMask is not installed');
+            alert('Please install MetaMask!');
+        }
+    });
+</script>
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+</body>
+</html>
