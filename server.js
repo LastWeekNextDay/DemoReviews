@@ -1,397 +1,112 @@
+const {Web3} = require("web3");
+const {createServerRequestsHandler} = require("./server_request_handlers");
+const {InfuraIPFSInteractor, LocalIPFSInteractor} = require("./ipfs");
+
 async function main() {
     const dotenv = require('dotenv');
-    const axios = require('axios');
     const express = require('express');
     const bodyParser = require('body-parser');
-    const {Web3} = require('web3');
-    const pinataSDK = require('@pinata/sdk');
     const cors = require('cors');
 
     // Load environment variables
     dotenv.config();
     console.log('Environment variables loaded.');
 
-    // Initialize Express server
-    const app = express();
-    app.use(bodyParser.json());
-    app.use(cors());
-    console.log('Express server initialized.');
+    // Check if all required environment variables are set
+    if (!process.env.WEB3_ENDPOINT) {
+        throw new Error('WEB3_ENDPOINT environment variable not set.');
+    }
+    if (!process.env.IPFS_MODE) {
+        throw new Error('IPFS_MODE environment variable not set.');
+    }
+    if (!process.env.CONTRACT_ADDRESS) {
+        throw new Error('CONTRACT_ADDRESS environment variable not set.');
+    }
+    if (!process.env.CONTRACT_ABI) {
+        throw new Error('CONTRACT_ABI environment variable not set.');
+    }
+    if (!process.env.CONTRACT_OWNER) {
+        throw new Error('CONTRACT_OWNER environment variable not set.');
+    }
+    if (!process.env.INFURA_API_KEY) {
+        throw new Error('INFURA_API_KEY environment variable not set.');
+    }
+    console.log('Environment variables checked.');
 
     // Initialize Web3
     const web3 = new Web3(process.env.WEB3_ENDPOINT);
     let res = await web3.eth.net.isListening();
     console.log('Web3 connection: ', res);
 
-    // Initialize contract instance
-    const contractABI = JSON.parse(process.env.CONTRACT_ABI);
-    const contractAddress = process.env.CONTRACT_ADDRESS;
-    const contract = new web3.eth.Contract(contractABI, contractAddress);
-    console.log('Contract initialized.');
-
-    // Initialize Pinata
-    const pinata = new pinataSDK({pinataJWTKey: process.env.PINATA_JWT, pinataSecretApiKey: process.env.PINATA_SECRET});
-    res = await pinata.testAuthentication();
-    console.log('Pinata initialization: ', res);
-
-    // Function to retrieve IPFS data
-    async function getIPFSData(ipfsHash) {
-        try {
-            // If an existing IPFS hash is provided, retrieve data
-            if (ipfsHash) {
-                console.log("Retrieving existing IPFS data.")
-
-                let found = false;
-
-                const filter = {
-                    status: "pinned",
-                }
-
-                // Check if the IPFS hash exists
-                const pinList = await pinata.pinList(filter);
-                if (pinList.rows) {
-                    found = pinList.rows.some(row => row.ipfs_pin_hash === ipfsHash);
-                }
-
-                if (!found) {
-                    console.log("IPFS hash not found.")
-                    return [];
-                }
-
-                let res;
-                try {
-                    res = await axios.get(process.env.PINATA_GATEWAY + "/ipfs/" + ipfsHash);
-                } catch (error) {
-                    console.error("Error retrieving IPFS data:", error);
-                    return [];
-                }
-
-                console.info("Fetched IPFS Data:\n", res.data)
-
-                if (res.data) {
-                    console.log("Retrieved existing reviews:\n", res.data);
-                    return res.data;
-                } else {
-                    console.log("No existing reviews found.");
-                    return [];
-                }
-            } else {
-                console.log("IPFS hash not provided.");
-                return [];
-            }
-        } catch (error) {
-            console.error("Error retrieving IPFS data:", error);
-            return [];
-        }
+    // Initialize IPFS
+    let IPFSInteractor;
+    if (process.env.IPFS_MODE.toLowerCase() === 'infura') {
+        IPFSInteractor = new InfuraIPFSInteractor();
+    } else if (process.env.IPFS_MODE.toLowerCase() === 'local') {
+        IPFSInteractor = new LocalIPFSInteractor();
+    } else {
+        throw new Error('Invalid IPFS mode.');
     }
+    console.log('IPFS initialized.');
 
-    // Function to lookup IPFS data
-    async function lookupIPFSData(name) {
-        const filter = {
-            status: "pinned",
-            name: name
-        }
+    // Create server request handlers
+    const serverRequestHandlers = createServerRequestsHandler(web3, IPFSInteractor);
+    console.log('Server request handlers created.');
 
-        console.log("Looking up IPFS data for ", name)
+    // Initialize Express server
+    const app = express();
+    app.use(bodyParser.json({limit: '5mb'}));
+    app.use(cors());
+    console.log('Express server initialized.');
 
-        res = await pinata.pinList(filter);
-        let hash = "";
-        let found = false;
-        for (let row of res.rows) {
-            if (row.metadata.name === "DomainMapping") {
-                found = true;
-                hash = row.ipfs_pin_hash;
-            }
-        }
+    app.get('/ping', serverRequestHandlers.pingServer);
 
-        return {found, hash};
-    }
+    app.post('/authorizedEditors/add', serverRequestHandlers.fetchAddAuthorizedEditorTransaction);
 
-    // Function to remove items from domain
-    async function removeItemsFromIPFSDomain(domain, items) {
-        let {found, hash} = await lookupIPFSData("DomainMapping");
+    app.delete('/authorizedEditors/:address/remove', serverRequestHandlers.fetchRemoveAuthorizedEditorTransaction);
 
-        if (!found) {
-            console.log("Domain mapping not found.");
-            return;
-        }
+    app.get('/authorizedEditors/:address?', serverRequestHandlers.fetchAuthorizedEditors);
 
-        try {
-            res = await axios.get(process.env.PINATA_GATEWAY + "/ipfs/" + hash);
-            let domMapping = res.data;
+    app.put('/items/:itemName/ipfs/update', serverRequestHandlers.fetchUpdateInfoIPFSHashOfItemTransaction);
 
-            if (domMapping[domain]) {
-                domMapping[domain] = domMapping[domain].filter(item => !items.includes(item));
-            }
+    app.get('/items/:itemName/ipfs', serverRequestHandlers.fetchGetInfoIPFSHashOfItem);
 
-            res = await pinata.unpin(hash);
+    app.put('/items/:itemName/info/update', serverRequestHandlers.updateItemInfo);
 
-            let options = {
-                pinataMetadata: {
-                    name: "DomainMapping"
-                }
-            }
+    app.get('/items/:itemName/info', serverRequestHandlers.fetchItemInfo);
 
-            res = await pinata.pinJSONToIPFS(domMapping, options);
-            console.log("Updated domain mapping:\n", domMapping);
-        } catch (error) {
-            console.error("Error removing items from domain:", error);
-        }
-    }
+    app.get('/items/:itemName?', serverRequestHandlers.fetchItems);
 
-    // Function to update IPFS domain to reviews mapping
-    async function updateIPFSDomain(domain, listOfItems) {
-        let {found, hash} = await lookupIPFSData("DomainMapping");
+    app.get('/items/id/:itemID', serverRequestHandlers.fetchItems);
 
-        const options = {
-            pinataMetadata: {
-                name: "DomainMapping"
-            }
-        }
+    app.get('/items/:itemName/id', serverRequestHandlers.fetchItemID);
 
-        let domMapping = {}
+    app.get('/items/:itemName/domains', serverRequestHandlers.fetchDomains);
 
-        if (!found) {
-            domMapping[domain] = listOfItems;
-        } else {
-            let res = await axios.get(process.env.PINATA_GATEWAY + "/ipfs/" + hash);
-            domMapping = res.data;
-            if (domMapping[domain]) {
-                for (let item of listOfItems) {
-                    if (!domMapping[domain].includes(item)) {
-                        domMapping[domain].push(item);
-                    }
-                }
-            } else {
-                domMapping[domain] = listOfItems;
-            }
+    app.get('/domains/:domainName?', serverRequestHandlers.fetchDomains);
 
-            // Unpin previous data
-            res = await pinata.unpin(hash);
-            console.log("Unpinning previous domain mapping:", res);
-        }
+    app.get('/domains/id', serverRequestHandlers.fetchDomains);
 
-        console.log("Pinning domain mapping:\n", domMapping);
-        let res = await pinata.pinJSONToIPFS(domMapping, options);
-        console.log("Response from pinning domain mapping:", res);
-    }
+    app.get('/domains/:domainName/id', serverRequestHandlers.fetchDomainID);
 
-    // Function to update or create IPFS reviews
-    async function updateIPFSReviews(ipfsHash, newReview, metadataName = "Reviews") {
-        let reviews = [];
-        if (ipfsHash) {
-            reviews = await getIPFSData(ipfsHash);
+    app.post("/reviews/:itemName/add", serverRequestHandlers.fetchAddReviewTransaction);
 
-            // If IPFS contains data
-            if (reviews.length > 0) {
-                // Check if the wallet already contains a review for this item
-                const existingReview = reviews.find(review => review.walletAddr === newReview.walletAddr);
-                if (existingReview) {
-                    console.log("User has already submitted a review for this item.");
-                    return false;
-                }
+    app.get('/reviews/:itemName?', serverRequestHandlers.fetchReviews);
 
-                // Unpin previous data
-                let res = await pinata.unpin(ipfsHash);
-                console.log("Unpinning previous data:", res);
-            }
-        }
+    app.get('/reviews/id/:reviewID?', serverRequestHandlers.fetchReviews)
 
-        console.log("Adding new review:\n", newReview);
+    app.get('/reviews/user/:address', serverRequestHandlers.fetchReviews);
 
-        // Add new review
-        reviews.push(newReview);
+    app.get('/reviews/domains/:domainName', serverRequestHandlers.fetchReviews);
 
-        // Store the updated data
-        let options = {
-            pinataMetadata: {
-                name: metadataName
-            }
-        }
+    app.get('/reviews/domains/:domainName/items/:itemName', serverRequestHandlers.fetchReviewsForItemOfDomain);
 
-        let res = await pinata.pinJSONToIPFS(reviews, options);
+    app.get('/reviews/domains/:domainName/items/id/:itemID', serverRequestHandlers.fetchReviewsForItemOfDomain);
 
-        let newCid = res.IpfsHash;
+    app.get('/reviews/domains/id/:domainID/items/:itemName', serverRequestHandlers.fetchReviewsForItemOfDomain);
 
-        console.log("Updated reviews:\n", reviews);
+    app.get('/reviews/domains/id/:domainID/items/id/:itemID', serverRequestHandlers.fetchReviewsForItemOfDomain);
 
-        console.log("New IPFS hash:", newCid);
-
-        return newCid;
-    }
-
-    app.get('/ping', (req, res) => {
-        console.log('Ping from', req.ip);
-        res.json({success: true, message: 'Pong'});
-    });
-
-    app.get('/getItemReviews', async (req, res) => {
-        console.log(req.query)
-
-        const {itemName, domainName} = req.query;
-
-        if (!itemName && !domainName) {
-            return res.status(400).json({success: false, message: 'Missing required query parameter'});
-        }
-
-        if (domainName) {
-            console.log("Looking up domain mapping for ", domainName)
-            let {found, hash} = await lookupIPFSData("DomainMapping");
-
-            if (!found) {
-                console.log("Domain mapping not found.");
-                return res.status(404).json({success: false, message: 'Domain not found'});
-            } else {
-                console.log("Retrieving domain mapping data.")
-                let axiosRes = await axios.get(process.env.PINATA_GATEWAY + "/ipfs/" + hash);
-                let domMapping = axiosRes.data;
-
-                console.log("Domain mapping:\n", domMapping);
-
-                if (domMapping[domainName]) {
-                    console.log("Getting reviews for domain ", domainName)
-                    let items = domMapping[domainName];
-                    let reviews = [];
-                    for (let item of items) {
-                        if (itemName) {
-                            if (item !== itemName) {
-                                continue;
-                            }
-                        }
-                        let ipfsHash = await contract.methods.getItemIPFSHash(item).call();
-                        let itemReviews = await getIPFSData(ipfsHash);
-                        itemReviews = itemReviews.filter(review => review.domain === domainName);
-                        reviews.push(...itemReviews);
-                    }
-
-                    res.json(reviews);
-                } else {
-                    console.log("Domain not found.");
-                    return res.status(404).json({success: false, message: 'Domain not found'});
-                }
-            }
-        } else {
-            // Get the existing IPFS hash from the contract
-            console.log("Getting IPFS hash.")
-            let currentIPFSHash = await contract.methods.getItemIPFSHash(itemName).call();
-            console.log("IPFS hash:", currentIPFSHash);
-
-            // Retrieve the reviews from IPFS
-            let reviews = await getIPFSData(currentIPFSHash);
-
-            // Send back the reviews
-            res.json(reviews);
-        }
-    });
-
-    /**
-     * @param {string} review.starRating
-     * @param {string} review.comment
-     * @param {string} review.walletAddress
-     */
-    app.post('/uploadReview', async (req, res) => {
-        console.log(req.body)
-
-        const {itemName, review, tx} = req.body;
-
-        console.log("Received review.")
-        console.log("Item name:", itemName)
-        console.log("Review:", review)
-        console.log("Transaction:", tx)
-
-        if (!itemName || !tx || !review) {
-            console.error("Missing required parameters.")
-            return res.status(400).json({success: false, message: 'Missing required parameters'});
-        }
-
-        try {
-            if (!tx.status) {
-                console.error("Invalid transaction receipt.")
-                return res.status(400).json({success: false, message: 'Invalid transaction receipt'});
-            } else {
-                if (tx.from.toLowerCase() !== review.walletAddress.toLowerCase()) {
-                    console.error("Transaction not done by reviewer.")
-                    return res.status(400).json({success: false, message: 'Transaction not done by reviewer'});
-                }
-            }
-
-            console.log("Trying to get hash.")
-
-            // Get the existing IPFS hash from the contract
-            let currentIPFSHash = await contract.methods.getItemIPFSHash(itemName).call();
-
-            console.log("Current IPFS hash:", currentIPFSHash)
-
-            console.log("Getting domain name.")
-
-            // Fix domain name
-            let domain = req.get('origin');
-            if (domain) {
-                if (domain.includes("://")) {
-                    domain = domain.split('://')[1];
-                }
-            } else {
-                domain = req.get('hostname')
-                if (!domain) {
-                    domain = "Unknown";
-                }
-            }
-
-            // Create a new review object
-            const newReview = {
-                walletAddr: review.walletAddress,
-                score: review.starRating,
-                domain: domain,
-                commentary: review.comment,
-                timestamp: Date.now()
-            };
-
-            console.log("Updating IPFS reviews data.")
-
-            // Update the IPFS file with the new review
-            const newIPFSHash = await updateIPFSReviews(currentIPFSHash, newReview, itemName);
-
-            if (newIPFSHash === false) {
-                console.error("User has already submitted a review for this item.")
-                return res.status(400).json({success: false, message: 'User has already submitted a review for this item'});
-            }
-
-            console.log("Updating IPFS domain mapping.")
-            await updateIPFSDomain(newReview.domain, [itemName]);
-
-            console.log("Updating contract.")
-
-            const gas = await contract.methods.modifyItemIPFSHash(itemName, newIPFSHash).estimateGas({from: process.env.CONTRACT_OWNER});
-            const gasPrice = await web3.eth.getGasPrice();
-
-            const tx2 = {
-                from: process.env.CONTRACT_OWNER,
-                to: contractAddress,
-                gas: gas,
-                gasPrice: gasPrice,
-                data: contract.methods.modifyItemIPFSHash(itemName, newIPFSHash).encodeABI()
-            };
-
-            const signedTx = await web3.eth.accounts.signTransaction(tx2, process.env.CONTRACT_OWNER_PRIVATE_KEY);
-
-            // Update the smart contract with the new IPFS hash
-            const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-
-            if (receipt.status) {
-                console.log("Contract updated successfully.")
-                console.log("Review submitted successfully.")
-            } else {
-                console.error("Error updating contract.")
-                console.error("Error submitting review.")
-                return res.status(500).json({success: false, message: "Error updating contract"});
-            }
-
-            // Send back the new IPFS hash
-            res.json({success: true, ipfsHash: newIPFSHash});
-        } catch (error) {
-            console.error("Error submitting review:", error);
-            res.status(500).json({success: false, message: "Error submitting review to IPFS"});
-        }
-    });
 
     app.listen(443, '0.0.0.0', () => {
         console.log('Server running on port 443');
