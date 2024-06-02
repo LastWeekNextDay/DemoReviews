@@ -153,7 +153,21 @@
                                         .then(response => response.json())
                                         .then(data => {
                                             if (data.success) {
-                                                alert('Editor removed successfully.');
+                                                try {
+                                                    window.ethereum.request({
+                                                        method: 'eth_sendTransaction',
+                                                        params: [data.message],
+                                                    })
+                                                        .then((txHash) => {
+                                                            console.log('Transaction sent successfully. Check your transaction on Etherscan.io', txHash);
+                                                            alert('Editor removed successfully');
+                                                        })
+                                                        .catch((error) => {
+                                                            console.error('Something went wrong: ', error);
+                                                        });
+                                                } catch (error) {
+                                                    console.error(error);
+                                                }
                                                 document.getElementById('dropdown-editors').selectedIndex = 0;
                                             } else {
                                                 alert('Failed to remove editor: ' + data.message);
