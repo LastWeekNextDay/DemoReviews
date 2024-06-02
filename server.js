@@ -1,6 +1,7 @@
 const {Web3} = require("web3");
 const {createServerRequestsHandler} = require("./server_request_handlers");
 const {InfuraIPFSInteractor, LocalIPFSInteractor} = require("./ipfs");
+const {dateLog, loadLogger} = require("./logger");
 
 async function main() {
     const dotenv = require('dotenv');
@@ -8,9 +9,13 @@ async function main() {
     const bodyParser = require('body-parser');
     const cors = require('cors');
 
+    // Load logger
+    loadLogger();
+    dateLog('Server started.');
+
     // Load environment variables
     dotenv.config();
-    console.log('Environment variables loaded.');
+    dateLog('Environment variables loaded.');
 
     // Check if all required environment variables are set
     if (!process.env.WEB3_ENDPOINT) {
@@ -31,12 +36,12 @@ async function main() {
     if (!process.env.INFURA_API_KEY) {
         throw new Error('INFURA_API_KEY environment variable not set.');
     }
-    console.log('Environment variables checked.');
+    dateLog('Environment variables checked.');
 
     // Initialize Web3
     const web3 = new Web3(process.env.WEB3_ENDPOINT);
     let res = await web3.eth.net.isListening();
-    console.log('Web3 connection: ', res);
+    dateLog('Web3 connection: ', res);
 
     // Initialize IPFS
     let IPFSInteractor;
@@ -47,17 +52,17 @@ async function main() {
     } else {
         throw new Error('Invalid IPFS mode.');
     }
-    console.log('IPFS initialized.');
+    dateLog('IPFS initialized.');
 
     // Create server request handlers
     const serverRequestHandlers = createServerRequestsHandler(web3, IPFSInteractor);
-    console.log('Server request handlers created.');
+    dateLog('Server request handlers created.');
 
     // Initialize Express server
     const app = express();
     app.use(bodyParser.json({limit: '5mb'}));
     app.use(cors());
-    console.log('Express server initialized.');
+    dateLog('Express server initialized.');
 
     app.get('/ping', serverRequestHandlers.pingServer);
 
@@ -109,7 +114,7 @@ async function main() {
 
 
     app.listen(443, '0.0.0.0', () => {
-        console.log('Server running on port 443');
+        dateLog('Server running on port 443');
     });
 }
 
