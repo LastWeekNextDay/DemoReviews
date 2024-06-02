@@ -403,7 +403,7 @@
 </div>
 <script>
     window.addEventListener('load', async () => {
-        if (typeof window.ethereum !== 'undefined') {
+        if (typeof window.ethereum !== 'undefined' || (typeof window.web3 !== 'undefined')) {
             try {
                 console.log('Requesting accounts...');
                 await window.ethereum.request({method: 'eth_requestAccounts'});
