@@ -2,6 +2,7 @@ const {Web3} = require("web3");
 const {createServerRequestsHandler} = require("./server_request_handlers");
 const {InfuraIPFSInteractor, LocalIPFSInteractor} = require("./ipfs");
 const {dateLog, loadLogger} = require("./logger");
+const {loadItemRegistration} = require("./item_registration");
 
 async function main() {
     const dotenv = require('dotenv');
@@ -16,6 +17,10 @@ async function main() {
     // Load environment variables
     dotenv.config();
     dateLog('Environment variables loaded.');
+
+    // Load item registration
+    loadItemRegistration();
+    dateLog('Item registration loaded.');
 
     // Check if all required environment variables are set
     if (!process.env.WEB3_ENDPOINT) {
@@ -78,6 +83,8 @@ async function main() {
 
     app.put('/items/:itemName/info/update', serverRequestHandlers.updateItemInfo);
 
+    app.post('/items/add', serverRequestHandlers.fetchAddItemTransaction);
+
     app.get('/items/:itemName/info', serverRequestHandlers.fetchItemInfo);
 
     app.get('/items/:itemName?', serverRequestHandlers.fetchItems);
@@ -106,12 +113,19 @@ async function main() {
 
     app.get('/reviews/domains/:domainName/items/:itemName', serverRequestHandlers.fetchReviewsForItemOfDomain);
 
-    app.get('/reviews/domains/:domainName/items/id/:itemID', serverRequestHandlers.fetchReviewsForItemOfDomain);
-
-    app.get('/reviews/domains/id/:domainID/items/:itemName', serverRequestHandlers.fetchReviewsForItemOfDomain);
-
     app.get('/reviews/domains/id/:domainID/items/id/:itemID', serverRequestHandlers.fetchReviewsForItemOfDomain);
 
+    app.post('/registrations/register', serverRequestHandlers.registerItem);
+
+    app.delete('/registrations/queue/remove', serverRequestHandlers.removeRegistrationFromQueue);
+
+    app.get('/registrations/queue', serverRequestHandlers.fetchRegistrationQueue);
+
+    app.get('/registrations/items/:itemName', serverRequestHandlers.checkRegistrationRequest);
+
+    app.post('/registrations/mapping', serverRequestHandlers.assignRegistrationToItem);
+
+    app.get('/registrations/mapping', serverRequestHandlers.fetchRegistrationMapping);
 
     app.listen(443, '0.0.0.0', () => {
         dateLog('Server running on port 443');

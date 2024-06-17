@@ -49,6 +49,10 @@ ALL ENDPOINTS RETURN MESSAGES IN THE RESPONSE JSON USING THIS FORMAT:
 
 Going forward, RESPONSE will show the expected response in the message portion of the returned JSON.
 
+Registration related files will be located in the /reg directory of the project.
+
+Logs will be located in the /logs directory of the project.
+
 > <b>GET</b> /ping - Check if server is running<br>
 > 
 > <b>RESPONSE</b><br>
@@ -102,7 +106,7 @@ Going forward, RESPONSE will show the expected response in the message portion o
 > RETURNS A TRANSACTION
 > ```
 
-> <b>GET</b> /items/<b>{itemName}</b>/info - Get the information of an item
+> <b>GET</b> /items/<b>{itemName}</b>/info?useMapping=<b>{trueFalse}</b> - Get the information of an item, with or without registration mapping
 >
 > <b>RESPONSE</b><br>
 > ```
@@ -161,6 +165,13 @@ Going forward, RESPONSE will show the expected response in the message portion o
 > <b>RESPONSE</b><br>
 > ```
 > [domain1, domain2, ...]
+> ```
+
+> <b>POST</b> /items/add?itemName=<b>{itemName}</b>&initiator=<b>{address}</b> - Add an item
+> 
+> <b>RESPONSE</b><br>
+> ```
+> RETURNS A TRANSACTION
 > ```
 
 > <b>GET</b> /domains/<b>{optionalDomainName}</b> - Get the list of domains or the information of a specific domain
@@ -285,34 +296,6 @@ Going forward, RESPONSE will show the expected response in the message portion o
 > }, ...] - ARRAY OF REVIEWS
 > ```
 
-> <b>GET</b> /reviews/domains/<b>{domainName}</b>/items/id/<b>{itemID}</b> - Get the reviews of an item in a domain by item ID
->
-> <b>RESPONSE</b><br>
-> ```
-> [{
->   id: number,
->   reviewer: string,
->   itemName: string,
->   domainName: string,
->   comment: string,
->   rating: number
-> }, ...] - ARRAY OF REVIEWS
-> ```
-
-> <b>GET</b> /reviews/domains/id/<b>{domainID}</b>/items/<b>{itemName}</b> - Get the reviews of an item in a domain by domain ID
->
-> <b>RESPONSE</b><br>
-> ```
-> [{
->   id: number,
->   reviewer: string,
->   itemName: string,
->   domainName: string,
->   comment: string,
->   rating: number
-> }, ...] - ARRAY OF REVIEWS
-> ```
-
 > <b>GET</b> /reviews/domains/id/<b>{domainID}</b>/items/id/<b>{itemID}</b> - Get the reviews of an item in a domain by domain ID and item ID
 >
 > <b>RESPONSE</b><br>
@@ -325,4 +308,37 @@ Going forward, RESPONSE will show the expected response in the message portion o
 >   comment: string,
 >   rating: number
 > }, ...] - ARRAY OF REVIEWS
+> ``` 
+
+> <b>POST</b> /registrations/register?itemName=<b>{itemName}</b> - Put item into queue for registration for domain
+> 
+> <b>RESPONSE</b><br>
+> ```
+> STATUS ON REGISTRATION REQUEST
+> ```
+
+> <b>DELETE</b> /registrations/queue/remove?initiator=<b>{address}</b>&proposedItemName=<b>{itemName}</b>&domain=<b>{domainName}</b> - Remove item from queue for registration for domain
+> 
+> <b>RESPONSE</b><br>
+> ```
+> STATUS ON REMOVAL REQUEST
+> ```
+
+> <b>GET</b> /registrations/<b>{itemName}</b> - Check if item is registered for domain
+> 
+> <b>RESPONSE</b><br>
+> ```
+> IF REGISTERED:
+> 
+> ASSIGNED ITEM NAME
+> 
+> IF NOT REGISTERED:
+> 
+> "Item not registered for domain"
+
+> <b>POST</b> /registrations/mapping?initiator=<b>{address}</b>&proposedItemName=<b>{itemName}</b>&domain=<b>{domainName}</b>&itemName=<b>{itemName}</b> - Map proposed item name to actual item name
+> 
+> <b>RESPONSE</b><br>
+> ```
+> STATUS ON MAPPING REQUEST
 > ```

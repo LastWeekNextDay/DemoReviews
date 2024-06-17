@@ -1,6 +1,9 @@
 const {getHostFromRequest, compileReviews} = require("./misc");
 const {createContract} = require("./contract");
 const {dateLog} = require("./logger");
+const {queueRegistration, checkRegistration, assignRegistrationToItem, removeRegistrationFromQueue, getQueue,
+    getRegistrationMapping
+} = require("./item_registration");
 
 let contractTxs;
 let web3;
@@ -189,8 +192,13 @@ class ServerRequestsHandler {
             }
             dateLog('\nReview comment:\n', comment, '\nReview rating:\n', rating);
             const hostName = getHostFromRequest(req);
-            const tx = await contractTxs.createAddReviewTransaction(initiator, hostName, itemName, comment, rating);
-            dateLog('Sending back add reviews transaction for', initiator,':\n', JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+            const correctedItemName = checkRegistration(itemName, hostName);
+            if (!correctedItemName) {
+                dateLog('Item not registered on domain');
+                return res.status(404).json({success: false, message: 'Item not registered on domain'});
+            }
+            const tx = await contractTxs.createAddReviewTransaction(initiator, hostName, correctedItemName, comment, rating);
+            dateLog('Sending back add reviews transaction for', initiator, ':\n', JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v));
             res.status(200).json({
                 success: true,
                 message: JSON.parse(JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v))
@@ -243,7 +251,7 @@ class ServerRequestsHandler {
                 dateLog('Domain:\n', domain);
                 dateLog('Sending back domain for', req.ip);
                 res.status(200).json({success: true, message: domain});
-            }  else if (itemName) {
+            } else if (itemName) {
                 const tx = await contractTxs.createGetItemTransaction(itemName);
                 const result = await web3.eth.call(tx);
                 const outputs = parsedABI.find((element) => element.name === 'getItem').outputs;
@@ -252,8 +260,7 @@ class ServerRequestsHandler {
                 dateLog('Domains:', availableOnDomainNames);
                 dateLog('Sending back domains of item for', req.ip);
                 res.status(200).json({success: true, message: availableOnDomainNames});
-            }
-            else {
+            } else {
                 dateLog('Received domains request from', req.ip);
                 const tx = await contractTxs.createGetDomainsTransaction();
                 let result = await web3.eth.call(tx);
@@ -262,7 +269,9 @@ class ServerRequestsHandler {
                 const domains = [];
                 for (let i = 0; i < decodedResult[0].length; i++) {
                     domains.push({
-                        id: Number(decodedResult[0][i][0]), name: decodedResult[0][i][1], itemNames: decodedResult[0][i][2]
+                        id: Number(decodedResult[0][i][0]),
+                        name: decodedResult[0][i][1],
+                        itemNames: decodedResult[0][i][2]
                     });
                 }
                 dateLog('Domains:', domains);
@@ -384,7 +393,12 @@ class ServerRequestsHandler {
                 res.status(200).json({success: true, message: review});
             } else if (itemName) {
                 dateLog('Received reviews for item request for', itemName, 'from', req.ip);
-                const tx = await contractTxs.createGetReviewsForItemTransaction(itemName);
+                const itemNameRegistered = checkRegistration(itemName, getHostFromRequest(req));
+                if (!itemNameRegistered){
+                    dateLog('Item not registered on domain');
+                    return res.status(404).json({success: false, message: 'Item not registered on domain'});
+                }
+                const tx = await contractTxs.createGetReviewsForItemTransaction(itemNameRegistered);
                 const result = await web3.eth.call(tx);
                 const outputs = parsedABI.find((element) => element.name === 'getReviewsForItem').outputs;
                 const decodedResult = web3.eth.abi.decodeParameters(outputs, result);
@@ -392,7 +406,7 @@ class ServerRequestsHandler {
                 dateLog('Reviews:\n', reviews);
                 dateLog('Sending back reviews for item for', req.ip);
                 res.status(200).json({success: true, message: reviews});
-            } else if (itemID){
+            } else if (itemID) {
                 dateLog('Received reviews for item ID request for', itemID, 'from', req.ip);
                 const tx = await contractTxs.createGetReviewsForItemByIDTransaction(itemID);
                 const result = await web3.eth.call(tx);
@@ -449,30 +463,27 @@ class ServerRequestsHandler {
             let decodedResult;
             let reviews;
             if (domainName) {
-                if (itemName){
-                    tx = await contractTxs.createGetReviewsForItemOfDomainTransaction(domainName, itemName);
+                if (itemName) {
+                    const itemNameRegistered = checkRegistration(itemName, getHostFromRequest(req));
+                    if (!itemNameRegistered){
+                        dateLog('Item not registered on domain');
+                        return res.status(404).json({success: false, message: 'Item not registered on domain'});
+                    }
+                    tx = await contractTxs.createGetReviewsForItemOfDomainTransaction(domainName, itemNameRegistered);
                     result = await web3.eth.call(tx);
                     outputs = parsedABI.find((element) => element.name === 'getReviewsForItemOfDomain').outputs;
-                } else if (itemID) {
-                    tx = await contractTxs.createGetReviewsForItemIDOfDomainTransaction(domainName, itemID);
-                    result = await web3.eth.call(tx);
-                    outputs = parsedABI.find((element) => element.name === 'getReviewsForItemIDOfDomain').outputs;
                 } else {
-                    dateLog('Missing item name or ID');
-                    return res.status(400).json({success: false, message: 'Missing item name or ID'});
+                    dateLog('Missing item name');
+                    return res.status(400).json({success: false, message: 'Missing item name'});
                 }
             } else if (domainID) {
-                if (itemName) {
-                    tx = await contractTxs.createGetReviewsForItemOfDomainByIDTransaction(domainID, itemName);
-                    result = await web3.eth.call(tx);
-                    outputs = parsedABI.find((element) => element.name === 'getReviewsForItemOfDomainByID').outputs;
-                } else if (itemID) {
+                if (itemID) {
                     tx = await contractTxs.createGetReviewsForItemIDOfDomainByIDTransaction(domainID, itemID);
                     result = await web3.eth.call(tx);
-                    outputs = parsedABI.find((element) => element.name === 'getReviewsForItemIDOfDomain').outputs;
+                    outputs = parsedABI.find((element) => element.name === 'getReviewsForItemIDOfDomainID').outputs;
                 } else {
-                    dateLog('Missing item name or ID');
-                    return res.status(400).json({success: false, message: 'Missing item name or ID'});
+                    dateLog('Missing item ID');
+                    return res.status(400).json({success: false, message: 'Missing item ID'});
                 }
             } else {
                 dateLog('Missing domain name or ID');
@@ -508,7 +519,7 @@ class ServerRequestsHandler {
             }
 
             dateLog('Received update item info request for', itemName, 'from', req.ip, 'using address', initiator);
-            dateLog('\nAlternate name:', alternateName, '\nDescription:', description, '\nImages:', images);
+            dateLog('\nAlternate name:', alternateName, '\nDescription:', description);
 
             // Check if the address is even able to update the item
             dateLog('Checking if', initiator, 'is authorized to update item info');
@@ -554,25 +565,237 @@ class ServerRequestsHandler {
     async fetchItemInfo(req, res) {
         try {
             const {itemName} = req.params;
+            const {useMapping} = req.query;
             dateLog('Received item info request for', itemName, 'from', req.ip);
             if (!itemName) {
                 dateLog('Missing item name');
                 return res.status(400).json({success: false, message: 'Missing item name'});
             }
             dateLog('Fetching item info for', itemName);
-            const tx = await contractTxs.createGetInfoIPFSHashOfItemTransaction(itemName);
+            let tx;
+            if (useMapping.toLowerCase() === 'true') {
+                let registrationMapping = checkRegistration(itemName, getHostFromRequest(req));
+                if (registrationMapping) {
+                    dateLog('Item registered on domain as', registrationMapping);
+                    tx = await contractTxs.createGetInfoIPFSHashOfItemTransaction(registrationMapping);
+                } else {
+                    dateLog('Item not registered on domain');
+                    return res.status(404).json({success: false, message: 'Item not registered on domain'});
+                }
+            } else {
+                tx = await contractTxs.createGetInfoIPFSHashOfItemTransaction(itemName);
+            }
             const result = await web3.eth.call(tx);
             const outputs = parsedABI.find((element) => element.name === 'getInfoIPFSHashOfItem').outputs;
             const decodedResult = web3.eth.abi.decodeParameters(outputs, result);
             const ipfsHash = decodedResult[0];
             dateLog('Getting item info from IPFS with hash:', ipfsHash)
             const response = await IPFSInteractor.getFromIPFS(ipfsHash);
-            dateLog('Item info:\n', response);
             dateLog('Sending back item info for', req.ip);
             res.status(200).json({success: true, message: response});
         } catch (error) {
             dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve item info'});
+        }
+    }
+
+    async fetchAddItemTransaction(req, res) {
+        try {
+            const {itemName, initiator} = req.query;
+            dateLog('Received add item request for', itemName, 'from', req.ip, 'using address', initiator);
+            if (!initiator) {
+                dateLog('Missing initiator');
+                return res.status(400).json({success: false, message: 'Missing address'});
+            }
+            if (!itemName) {
+                dateLog('Missing item name');
+                return res.status(400).json({success: false, message: 'Missing item name'});
+            }
+            const tx = await contractTxs.createAddItemTransaction(initiator, itemName);
+            dateLog('Sending back add item transaction for', initiator, ':\n', JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+            res.status(200).json({
+                success: true,
+                message: JSON.parse(JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v))
+            });
+        } catch (error) {
+            dateLog(error);
+            res.status(500).json({success: false, message: 'Failed to create transaction'});
+        }
+    }
+
+    async registerItem(req, res) {
+        try {
+            const {itemName} = req.query;
+            dateLog('Received item registration request for', itemName, 'from', req.ip, 'using domain', getHostFromRequest(req));
+            if (!itemName) {
+                dateLog('Missing item name');
+                return res.status(400).json({success: false, message: 'Missing item name'});
+            }
+            if (checkRegistration(itemName, getHostFromRequest(req))) {
+                dateLog('Item already registered for domain', getHostFromRequest(req));
+                return res.status(400).json({success: false, message: 'Item already registered for domain'});
+            } else {
+                queueRegistration(itemName, getHostFromRequest(req));
+                dateLog('Item', itemName, 'queued for registration');
+                return res.status(200).json({success: true, message: 'Item queued for registration for domain'});
+            }
+        } catch (error) {
+            dateLog(error);
+            res.status(500).json({success: false, message: 'Failed to register item'});
+        }
+    }
+
+    async checkRegistrationRequest(req, res) {
+        try {
+            const {itemName} = req.params;
+            dateLog('Received item registration check request for', itemName, 'from', req.ip, 'using domain', getHostFromRequest(req));
+            if (!itemName) {
+                dateLog('Missing item name');
+                return res.status(400).json({success: false, message: 'Missing item name'});
+            }
+            const itemNameRegistered = checkRegistration(itemName, getHostFromRequest(req));
+            if (itemNameRegistered) {
+                dateLog('Item', itemName, 'registered as', itemNameRegistered, 'for domain', getHostFromRequest(req));
+                return res.status(200).json({success: true, message: itemNameRegistered});
+            } else {
+                dateLog('Item', itemName, 'not registered for domain', getHostFromRequest(req));
+                return res.status(404).json({success: false, message: 'Item not registered for domain'});
+            }
+        } catch (error) {
+            dateLog(error);
+            res.status(500).json({success: false, message: 'Failed to check registration'});
+        }
+    }
+
+    async assignRegistrationToItem(req, res) {
+        try {
+            const {initiator, proposedItemName, domain, itemName} = req.query;
+            dateLog('Received assign registration request for', proposedItemName, 'of domain', domain, 'from', req.ip, 'using address', initiator, 'to item', itemName);
+            if (!initiator) {
+                dateLog('Missing initiator');
+                return res.status(400).json({success: false, message: 'Missing address'});
+            }
+            if (!proposedItemName) {
+                dateLog('Missing proposed item name');
+                return res.status(400).json({success: false, message: 'Missing proposed item name'});
+            }
+            if (!domain) {
+                dateLog('Missing domain');
+                return res.status(400).json({success: false, message: 'Missing domain'});
+            }
+            if (!itemName) {
+                dateLog('Missing item name');
+                return res.status(400).json({success: false, message: 'Missing item name'});
+            }
+            const tx = await contractTxs.createIsAuthorizedEditorTransaction(initiator);
+            const result = await web3.eth.call(tx);
+            const outputs = parsedABI.find((element) => element.name === 'isAuthorizedEditorAddress').outputs;
+            const decodedResult = web3.eth.abi.decodeParameters(outputs, result);
+            if (!decodedResult[0]) {
+                dateLog('Unauthorized to assign registration');
+                return res.status(403).json({success: false, message: 'Unauthorized to assign registration'});
+            }
+            try {
+                assignRegistrationToItem(proposedItemName, domain, itemName);
+                dateLog('Assigned registration for', proposedItemName, 'of domain', domain, 'to item', itemName);
+                return res.status(200).json({success: true, message: 'Assigned registration for item'});
+            } catch (error) {
+                dateLog(error);
+                res.status(500).json({success: false, message: 'Failed to assign registration to item'});
+            }
+        } catch (error) {
+            dateLog(error);
+            res.status(500).json({success: false, message: 'Failed to assign registration to item'});
+        }
+    }
+
+    async removeRegistrationFromQueue(req, res) {
+        try {
+            const {initiator, proposedItemName, domain} = req.query;
+            dateLog('Received remove registration request for', proposedItemName, 'of domain', domain, 'from', req.ip, 'using address', initiator);
+            if (!initiator) {
+                dateLog('Missing initiator');
+                return res.status(400).json({success: false, message: 'Missing address'});
+            }
+            if (!proposedItemName) {
+                dateLog('Missing proposed item name');
+                return res.status(400).json({success: false, message: 'Missing proposed item name'});
+            }
+            if (!domain) {
+                dateLog('Missing domain');
+                return res.status(400).json({success: false, message: 'Missing domain'});
+            }
+            const tx = await contractTxs.createIsAuthorizedEditorTransaction(initiator);
+            const result = await web3.eth.call(tx);
+            const outputs = parsedABI.find((element) => element.name === 'isAuthorizedEditorAddress').outputs;
+            const decodedResult = web3.eth.abi.decodeParameters(outputs, result);
+            if (!decodedResult[0]) {
+                dateLog('Unauthorized to remove registration');
+                return res.status(403).json({success: false, message: 'Unauthorized to remove registration'});
+            }
+            try {
+                removeRegistrationFromQueue(proposedItemName, domain);
+                dateLog('Removed registration for', proposedItemName, 'of domain', domain);
+                return res.status(200).json({success: true, message: 'Removed registration from queue'});
+            } catch (error) {
+                dateLog(error);
+                res.status(500).json({success: false, message: 'Failed to remove registration from queue'});
+            }
+        } catch (error) {
+            dateLog(error);
+            res.status(500).json({success: false, message: 'Failed to remove registration from queue'});
+        }
+    }
+
+    async fetchRegistrationQueue(req, res) {
+        try {
+            const {initiator} = req.query;
+            dateLog('Received registration queue request from', req.ip, 'using address', initiator);
+            if (!initiator) {
+                dateLog('Missing initiator');
+                return res.status(400).json({success: false, message: 'Missing address'});
+            }
+            const tx = await contractTxs.createIsAuthorizedEditorTransaction(initiator);
+            const result = await web3.eth.call(tx);
+            const outputs = parsedABI.find((element) => element.name === 'isAuthorizedEditorAddress').outputs;
+            const decodedResult = web3.eth.abi.decodeParameters(outputs, result);
+            if (!decodedResult[0]) {
+                dateLog('Unauthorized to retrieve registration queue');
+                return res.status(403).json({success: false, message: 'Unauthorized to retrieve registration queue'});
+            }
+            const queue = getQueue();
+            dateLog('Registration queue:', queue);
+            dateLog('Sending back registration queue for', req.ip);
+            res.status(200).json({success: true, message: queue});
+        } catch (error) {
+            dateLog(error);
+            res.status(500).json({success: false, message: 'Failed to retrieve registration queue'});
+        }
+    }
+
+    async fetchRegistrationMapping(req, res) {
+        try {
+            const {initiator} = req.query;
+            dateLog('Received registration mapping request from', req.ip, 'using address', initiator);
+            if (!initiator) {
+                dateLog('Missing initiator');
+                return res.status(400).json({success: false, message: 'Missing address'});
+            }
+            const tx = await contractTxs.createIsAuthorizedEditorTransaction(initiator);
+            const result = await web3.eth.call(tx);
+            const outputs = parsedABI.find((element) => element.name === 'isAuthorizedEditorAddress').outputs;
+            const decodedResult = web3.eth.abi.decodeParameters(outputs, result);
+            if (!decodedResult[0]) {
+                dateLog('Unauthorized to retrieve registration mapping');
+                return res.status(403).json({success: false, message: 'Unauthorized to retrieve registration mapping'});
+            }
+            const mapping = getRegistrationMapping();
+            dateLog('Registration mapping:', mapping);
+            dateLog('Sending back registration mapping for', req.ip);
+            res.status(200).json({success: true, message: mapping});
+        } catch (error) {
+            dateLog(error);
+            res.status(500).json({success: false, message: 'Failed to retrieve registration mapping'});
         }
     }
 }

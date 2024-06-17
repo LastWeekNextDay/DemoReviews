@@ -44,6 +44,17 @@
             <li class="nav-item">
                 <a class="nav-link" id="item-tab" data-toggle="tab" href="#item" role="tab">Item Info</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" id="items-tab" data-toggle="tab" href="#items" role="tab">Items</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="registration-tab" data-toggle="tab" href="#registration"
+                   role="tab">Registration</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="mapping-tab" data-toggle="tab" href="#mapping"
+                   role="tab">Mapping</a>
+            </li>
         </ul>
         <div class="tab-content" id="tabContent">
             <div class="tab-pane fade show active" id="editors" role="tabpanel">
@@ -323,7 +334,7 @@
                                         };
 
                                         fetch('http://localhost:443/items/' + encodeURIComponent(itemName)
-                                            + '/info/update?initiator='+ encodeURIComponent(account), {
+                                            + '/info/update?initiator=' + encodeURIComponent(account), {
                                             method: 'PUT',
                                             headers: {
                                                 'Content-Type': 'application/json'
@@ -411,6 +422,206 @@
                         </script>
                     </div>
                 </div>
+            </div>
+            <div class="tab-pane fade" id="items" role="tabpanel">
+                <!-- Get and Add Items -->
+                <ul class="nav nav-pills mb-3" id="pills-items-tab" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="add-items-tab" data-toggle="pill" href="#add-item"
+                           role="tab">Add</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="get-items-tab" data-toggle="pill" href="#get-items" role="tab">Get</a>
+                    </li>
+                </ul>
+                <div class="tab-content" id="pills-items-tabContent">
+                    <div class="tab-pane fade show active" id="add-item" role="tabpanel">
+                        <!-- Add item -->
+                        <form id="addItemForm">
+                            <div class="form-group">
+                                <label for="itemNameAdd">Item Name:</label>
+                                <input type="text" class="form-control" id="itemNameAdd">
+                            </div>
+                            <button type="submit" class="btn btn-primary button-update">Add Item</button>
+                        </form>
+                        <script>
+                            document.getElementById('addItemForm').addEventListener('submit', async function (event) {
+                                event.preventDefault();
+
+                                const itemName = document.getElementById('itemNameAdd').value;
+
+                                if (typeof window.ethereum !== 'undefined' || (typeof window.web3 !== 'undefined')) {
+                                    const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                                    const account = accounts[0];
+
+                                    fetch('http://localhost:443/items/add?itemName=' + encodeURIComponent(itemName) + '&initiator=' + encodeURIComponent(account), {
+                                        method: 'POST',
+                                    })
+                                        .then(response => response.json())
+                                        .then(async data => {
+                                            if (data.success) {
+                                                try {
+                                                    window.ethereum.request({
+                                                        method: 'eth_sendTransaction',
+                                                        params: [data.message],
+                                                    })
+                                                        .then((txHash) => {
+                                                            console.log('Transaction sent successfully. Check your transaction on Etherscan.io', txHash);
+                                                        })
+                                                        .catch((error) => {
+                                                            console.error('Something went wrong: ', error);
+                                                        });
+                                                } catch (error) {
+                                                    console.error(error);
+                                                }
+                                            } else {
+                                                alert('Failed to create transaction: ' + data.message);
+                                            }
+                                        })
+                                        .catch((error) => {
+                                            console.error('Error:', error);
+                                            alert('Failed to create transaction');
+                                        });
+                                } else {
+                                    console.log('MetaMask is not installed. Please consider installing it: https://metamask.io/download.html');
+                                }
+                            });
+                        </script>
+                    </div>
+                    <div class="tab-pane fade" id="get-items" role="tabpanel">
+                        <!-- Get item -->
+                        <button class="btn btn-primary button-refresh" id="refreshItemList">Refresh</button>
+                        <ul id="itemList"></ul>
+                        <script>
+                            document.getElementById('refreshItemList').addEventListener('click', function () {
+                                fetch('http://localhost:443/items')
+                                    .then(async data => {
+                                        const json = await data.json();
+                                        let itemList = document.getElementById('itemList');
+                                        itemList.innerHTML = '';
+                                        json.message.forEach(item => {
+                                            let listItem = document.createElement('li');
+                                            listItem.textContent = item.name;
+                                            itemList.appendChild(listItem);
+                                        });
+                                    })
+                                    .catch(error => console.error('Error:', error));
+                            });
+                        </script>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="registration" role="tabpanel">
+                <!-- Approve and Reject Registrations -->
+                <button class="btn btn-primary button-refresh" id="refreshRegistrationList">Refresh</button>
+                <div id="registrationList"></div>
+                <script>
+                    document.getElementById('refreshRegistrationList').addEventListener('click', async function () {
+                        const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                        const account = accounts[0];
+                        const response = await fetch('http://localhost:443/registrations/queue?initiator=' + encodeURIComponent(account));
+                        const data = await response.json();
+                        const response2 = await fetch('http://localhost:443/items');
+                        const data2 = await response2.json();
+                        let items = [];
+                        if (data2.success) {
+                            for (const item of data2.message) {
+                                items.push(item.name);
+                            }
+                        }
+                        if (data.success) {
+                            const registrations = data.message;
+                            const registrationList = document.getElementById('registrationList');
+                            registrationList.innerHTML = '';
+                            for (const registration of registrations) {
+                                const div = document.createElement('div');
+                                div.textContent = `Domain: ${registration.domain}, Requested Item Name: ${registration.proposedItemName}`;
+
+                                const select = document.createElement('select');
+                                for (const itemName of items) {
+                                    const option = document.createElement('option');
+                                    option.text = itemName;
+                                    option.value = itemName;
+                                    select.add(option);
+                                }
+                                div.appendChild(select);
+
+                                const approveButton = document.createElement('button');
+                                approveButton.textContent = 'APPROVE';
+                                approveButton.addEventListener('click', async function () {
+                                    const selectedItemName = select.value;
+                                    const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                                    const account = accounts[0];
+                                    const response = await fetch('http://localhost:443/registrations/mapping?initiator=' + encodeURIComponent(account) +
+                                        '&proposedItemName=' + encodeURIComponent(registration.proposedItemName) +
+                                        '&domain=' + encodeURIComponent(registration.domain) +
+                                        '&itemName=' + encodeURIComponent(selectedItemName), {
+                                        method: 'POST'
+                                    });
+                                    const data = await response.json();
+                                    if (data.success) {
+                                        div.remove();
+                                        const response2 = await fetch('http://localhost:443/registrations/queue/remove?initiator=' + encodeURIComponent(account) +
+                                            '&proposedItemName=' + encodeURIComponent(registration.proposedItemName) +
+                                            '&domain=' + encodeURIComponent(registration.domain), {
+                                            method: 'DELETE'
+                                        });
+                                    } else {
+                                        console.error('Failed to approve registration:', data.message);
+                                    }
+                                });
+                                div.appendChild(approveButton);
+
+                                const rejectButton = document.createElement('button');
+                                rejectButton.textContent = 'DENY';
+                                rejectButton.addEventListener('click', async function () {
+                                    const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                                    const account = accounts[0];
+                                    const response = await fetch('http://localhost:443/registrations/queue/remove?initiator=' + encodeURIComponent(account) +
+                                        '&proposedItemName=' + encodeURIComponent(registration.proposedItemName) +
+                                        '&domain=' + encodeURIComponent(registration.domain), {
+                                        method: 'DELETE'
+                                    });
+                                    const data = await response.json();
+                                    if (data.success) {
+                                        div.remove();
+                                    } else {
+                                        console.error('Failed to reject registration:', data.message);
+                                    }
+                                });
+                                div.appendChild(rejectButton);
+
+                                registrationList.appendChild(div);
+                            }
+                        } else {
+                            console.error('Failed to fetch registration queue:', data.message);
+                        }
+                    });
+                </script>
+            </div>
+            <div class="tab-pane fade" id="mapping" role="tabpanel">
+                <button class="btn btn-primary button-refresh" id="refreshMappingList">Refresh</button>
+                <div id="mappingList"></div>
+                <script>
+                    document.getElementById('refreshMappingList').addEventListener('click', async function () {
+                        const accounts = await window.ethereum.request({method: 'eth_requestAccounts'});
+                        const account = accounts[0];
+                        const response = await fetch('http://localhost:443/registrations/mapping?initiator=' + encodeURIComponent(account));
+                        const data = await response.json();
+                        if (data.success) {
+                            const mapping = data.message;
+                            const mappingList = document.getElementById('mappingList');
+                            mappingList.innerHTML = '';
+                            for (const map of mapping) {
+                                const div = document.createElement('div');
+                                div.textContent = `Domain: ${map.domain}, Item Name: ${map.itemName}, Requested Item Name: ${map.proposedItemName}`;
+                                mappingList.appendChild(div);
+                            }
+                        } else {
+                            console.error('Failed to fetch mapping:', data.message);
+                        }
+                    });
+                </script>
             </div>
         </div>
     </div>

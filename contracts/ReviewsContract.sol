@@ -150,7 +150,7 @@ contract ReviewsContract {
 
         // Check if item exists
         if (!itemExists[itemName]) {
-            addItem(itemName);
+            revert("Item does not exist");
         }
 
         // Add review
@@ -181,7 +181,10 @@ contract ReviewsContract {
         domainIDIterator++;
     }
 
-    function addItem(string memory itemName) private {
+    //*** ADD ITEM ***//
+
+    function addItem(string memory itemName) external {
+        require(isAuthorizedEditor[msg.sender] || msg.sender == owner, "Only authorized editors");
         Item memory item = Item(itemIDIterator, itemName, "", new string[](0), "0.00");
         items[itemName] = item;
         itemExists[itemName] = true;
@@ -340,13 +343,5 @@ contract ReviewsContract {
 
     function getReviewsForItemIDOfDomainByID(uint domainID, uint itemID) external view returns (Review[] memory) {
         return getReviewsForItemOfDomain(domainNameOfID[domainID], itemNameOfID[itemID]);
-    }
-
-    function getReviewsForItemOfDomainByID(uint domainID, string memory itemName) external view returns (Review[] memory) {
-        return getReviewsForItemOfDomain(domainNameOfID[domainID], itemName);
-    }
-
-    function getReviewsForItemIDOfDomain(string memory domainName, uint itemID) external view returns (Review[] memory) {
-        return getReviewsForItemOfDomain(domainName, itemNameOfID[itemID]);
     }
 }

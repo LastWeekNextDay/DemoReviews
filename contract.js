@@ -226,21 +226,12 @@ class ContractTransactions {
         };
     }
 
-    async createGetReviewsForItemOfDomainByIDTransaction(domainID, itemName) {
-        const data = contract.methods.getReviewsForItemOfDomainByID(domainID, itemName).encodeABI();
-        let gas = await contract.methods.getReviewsForItemOfDomainByID(domainID, itemName).estimateGas();
+    async createAddItemTransaction(initiator, itemName) {
+        const data = contract.methods.addItem(itemName).encodeABI();
+        let gas = await contract.methods.addItem(itemName).estimateGas({from: initiator});
         gas = BigInt(Math.ceil(Number(gas) * 1.2));
         return {
-            to: process.env.CONTRACT_ADDRESS, gas: gas, data: data
-        };
-    }
-
-    async createGetReviewsForItemIDOfDomainTransaction(domainName, itemID) {
-        const data = contract.methods.getReviewsForItemIDOfDomain(domainName, itemID).encodeABI();
-        let gas = await contract.methods.getReviewsForItemIDOfDomain(domainName, itemID).estimateGas();
-        gas = BigInt(Math.ceil(Number(gas) * 1.2));
-        return {
-            to: process.env.CONTRACT_ADDRESS, gas: gas, data: data
+            from: initiator, to: process.env.CONTRACT_ADDRESS, gas: gas, data: data
         };
     }
 }
