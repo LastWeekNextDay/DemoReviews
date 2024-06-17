@@ -25,7 +25,7 @@ class ServerRequestsHandler {
         try {
             return await web3.eth.net.isListening();
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             return false;
         }
     }
@@ -35,7 +35,7 @@ class ServerRequestsHandler {
             dateLog('Ping from', req.ip);
             res.json({success: true, message: 'Pong'});
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({
                 success: true, message: 'Ping reached but server encountered error during pinging back.'
             });
@@ -61,7 +61,7 @@ class ServerRequestsHandler {
                 message: JSON.parse(JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v))
             });
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to create transaction'});
         }
     }
@@ -86,7 +86,7 @@ class ServerRequestsHandler {
                 message: JSON.parse(JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v))
             });
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to create transaction'});
         }
     }
@@ -114,7 +114,7 @@ class ServerRequestsHandler {
                 res.status(200).json({success: true, message: decodedResult[0]});
             }
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve authorized editors'});
         }
     }
@@ -142,7 +142,7 @@ class ServerRequestsHandler {
                 success: true, message: JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v)
             });
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to create transaction'});
         }
     }
@@ -164,7 +164,7 @@ class ServerRequestsHandler {
             dateLog('Sending back IPFS hash for', req.ip);
             res.status(200).json({success: true, message: ipfsHash});
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve IPFS hash'});
         }
     }
@@ -196,7 +196,7 @@ class ServerRequestsHandler {
                 message: JSON.parse(JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v))
             });
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to add review'});
         }
     }
@@ -213,7 +213,7 @@ class ServerRequestsHandler {
             dateLog('Sending back domain ID for', req.ip);
             res.status(200).json({success: true, message: Number(decodedResult[0])});
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve domain ID'});
         }
     }
@@ -270,7 +270,7 @@ class ServerRequestsHandler {
                 res.status(200).json({success: true, message: domains});
             }
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve domain'});
         }
     }
@@ -290,7 +290,7 @@ class ServerRequestsHandler {
             dateLog('Sending back item ID for', req.ip);
             res.status(200).json({success: true, message: Number(decodedResult[0])});
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve item ID'});
         }
     }
@@ -346,7 +346,7 @@ class ServerRequestsHandler {
                 });
             }
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve item'});
         }
     }
@@ -434,7 +434,7 @@ class ServerRequestsHandler {
                 res.status(200).json({success: true, message: reviews});
             }
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve review'});
         }
     }
@@ -484,7 +484,7 @@ class ServerRequestsHandler {
             dateLog('Sending back reviews for item of domain for', req.ip);
             res.status(200).json({success: true, message: reviews});
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve reviews for item of domain'});
         }
     }
@@ -546,7 +546,7 @@ class ServerRequestsHandler {
                 message: JSON.parse(JSON.stringify(tx, (_, v) => typeof v === 'bigint' ? v.toString() : v))
             });
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to update item info'});
         }
     }
@@ -571,7 +571,7 @@ class ServerRequestsHandler {
             dateLog('Sending back item info for', req.ip);
             res.status(200).json({success: true, message: response});
         } catch (error) {
-            console.error(error);
+            dateLog(error);
             res.status(500).json({success: false, message: 'Failed to retrieve item info'});
         }
     }
