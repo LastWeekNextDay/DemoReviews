@@ -71,6 +71,16 @@ function checkRegistration(proposedItemName, domain) {
     return null;
 }
 
+function checkQueue(proposedItemName, domain) {
+    let queue = getQueue();
+    for (let i = 0; i < queue.length; i++) {
+        if (queue[i].proposedItemName === proposedItemName && queue[i].domain === domain) {
+            return true;
+        }
+    }
+    return false;
+}
+
 module.exports = {
-    loadItemRegistration, queueRegistration, assignRegistrationToItem, checkRegistration, removeRegistrationFromQueue, getQueue, getRegistrationMapping
+    loadItemRegistration, checkQueue, queueRegistration, assignRegistrationToItem, checkRegistration, removeRegistrationFromQueue, getQueue, getRegistrationMapping
 }

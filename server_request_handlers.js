@@ -2,7 +2,7 @@ const {getHostFromRequest, compileReviews} = require("./misc");
 const {createContract} = require("./contract");
 const {dateLog} = require("./logger");
 const {queueRegistration, checkRegistration, assignRegistrationToItem, removeRegistrationFromQueue, getQueue,
-    getRegistrationMapping
+    getRegistrationMapping, checkQueue
 } = require("./item_registration");
 
 let contractTxs;
@@ -634,6 +634,9 @@ class ServerRequestsHandler {
             if (checkRegistration(itemName, getHostFromRequest(req))) {
                 dateLog('Item already registered for domain', getHostFromRequest(req));
                 return res.status(400).json({success: false, message: 'Item already registered for domain'});
+            } else if (checkQueue(itemName, getHostFromRequest(req))) {
+                dateLog('Item already queued for registration for domain', getHostFromRequest(req));
+                return res.status(400).json({success: false, message: 'Item already queued for registration for domain'});
             } else {
                 queueRegistration(itemName, getHostFromRequest(req));
                 dateLog('Item', itemName, 'queued for registration');
