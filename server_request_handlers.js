@@ -573,7 +573,9 @@ class ServerRequestsHandler {
             }
             dateLog('Fetching item info for', itemName);
             let tx;
-            if (useMapping.toLowerCase() === 'true') {
+            if (useMapping === undefined || useMapping.toLowerCase() === 'false'){
+                tx = await contractTxs.createGetInfoIPFSHashOfItemTransaction(itemName);
+            } else {
                 let registrationMapping = checkRegistration(itemName, getHostFromRequest(req));
                 if (registrationMapping) {
                     dateLog('Item registered on domain as', registrationMapping);
@@ -582,8 +584,6 @@ class ServerRequestsHandler {
                     dateLog('Item not registered on domain');
                     return res.status(404).json({success: false, message: 'Item not registered on domain'});
                 }
-            } else {
-                tx = await contractTxs.createGetInfoIPFSHashOfItemTransaction(itemName);
             }
             const result = await web3.eth.call(tx);
             const outputs = parsedABI.find((element) => element.name === 'getInfoIPFSHashOfItem').outputs;
